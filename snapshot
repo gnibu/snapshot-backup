@@ -1,0 +1,161 @@
+#!/bin/bash
+
+# This files is sourcing backup script (snap files)
+# See exemple.org.snap for parameters and usage example
+
+# Backup when launch every day will keep snapshots from approx
+# 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180 days ago
+
+# You should'nt have to change anything in this script which is for internal use
+
+# ssh configuration: for more security,  you can add something like the line after
+# before the key used in your .ssh/authorized_key2 file
+#  command="echo $SSH_ORIGINAL_COMMAND >> ~/ssh_commands.log ; echo $SSH_ORIGINAL_COMMAND | egrep -q '^(rsync --server --sender -vlogDtpr . /(var|etc|root|home)|date)$' &&  eval $SSH_ORIGINAL_COMMAND",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,from="snapshoting.host.org" 
+
+usage ()
+{
+	echo "Usage: $(basename $0) snapfile.snap [options]"
+	echo "Options: -d => dry run for rsync (rotation is done)"
+}
+
+if [ $# -lt 1 ] ; then
+	usage
+	exit 1
+fi
+
+SNAPFILE=$1
+DRYRUN=0
+if [ $# -eq 2 ] ; then
+	if [ "m$2" = "m-d" ] ; then
+		echo "Dry run for rsync (rotation is done)"
+		DRYRUN=1
+	else
+		usage
+	fi
+fi
+
+# Memorize if snaps have been rotated 
+snap_rotated=0
+
+# set io prio to idle
+ionice -c3 -p$$ 
+
+fatal ()
+{
+	echo $1
+	echo -e "ERROR snapshot of $SRC_HOST `date +%Y%m%d`\n$1" | MAIL
+	exit 1
+}
+
+rotate_snapshots ()
+{
+  SD=$SNAPDIR/$SRC_HOST/snapshot
+  for version in 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180
+    do [ -d $SD.$version ] || mkdir $SD.$version
+  done
+
+  echo Rotating snapshots
+  #rotation every month
+  if [ $(date "+%-d") -eq 27 ]; then
+	  rm -rf $SD.180 &&\
+      mv $SD.150 $SD.180 &&\
+      mv $SD.120 $SD.150 &&\
+      mv $SD.090 $SD.120 &&\
+      mv $SD.060 $SD.090 &&\
+      cp -al $SD.030 $SD.060
+  fi
+  
+  #rotation every 5 days
+  if [ $(($(date "+%-d")%5)) -eq 2 ]; then
+	  rm -rf $SD.030 &&\
+      mv $SD.025 $SD.030 &&\
+      mv $SD.020 $SD.025 &&\
+      mv $SD.015 $SD.020 &&\
+      mv $SD.010 $SD.015 &&\
+      cp -al $SD.005 $SD.010
+  fi
+
+  #rotation every day (one lauch per day)
+  rm -rf $SD.005 &&\
+  mv $SD.004 $SD.005 &&\
+  mv $SD.003 $SD.004 &&\
+  mv $SD.002 $SD.003 &&\
+  mv $SD.001 $SD.002 &&\
+  cp -al $SD.000 $SD.001
+
+  if [ 0 -eq $? ] ; then
+	  echo Rotation OK
+  else
+	  echo Error during snap rotation
+	  exit 1
+  fi
+  snap_rotated=1
+}
+
+MAIL ()
+{
+  mail -s "$MAILSUBJECT" "$MAILDEST"
+}
+
+INIT ()
+{
+  [ "m$SNAPDIR" == "m" ] && fatal "Please define SNAPDIR"
+  SRC_HOST=$(basename $SNAPFILE .snap)
+  [ -d $SNAPDIR ] || fatal "SNAPDIR $SNAPDIR doesnt exist"
+  [ -d $SNAPDIR/$SRC_HOST ] || mkdir -p $SNAPDIR/$SRC_HOST
+  MAILSUBJECT="[SNAP] $SRC_HOST"
+  SSH="ssh $SRC_USER@$SRC_HOST -i /root/.ssh/id_dsa_backup-$SRC_HOST"
+  RSRC=" $SRC_USER@$SRC_HOST:"
+  export ERRORFILE=/tmp/RSYNC-$SRC_HOST-ERROR
+  [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
+  DEST=$SNAPDIR/$SRC_HOST/snapshot.000/
+  echo "Starting snapshot backup of $SRC_HOST" | MAIL
+  $SSH date
+  ret=$?
+  if [ 0 -eq $ret ] ; then
+	  echo connection to $SRC_HOST OK
+  else
+	  echo "$0  : Error, server $SRC_HOST unreachable" | MAIL
+	  exit 1
+  fi
+  rotate_snapshots
+}
+
+RSYNC () {
+  if [ $snap_rotated -ne 1 ] ; then
+	  fatal "INIT has not been called"
+  fi
+  if [ $DRYRUN -ne 1 ] ; then
+	  echo
+	  echo "----------------------------------"
+	  echo Running rsync $*
+	  nice -n 19 rsync --perms --delete --max-delete=5000 \
+          --chmod=u+rw,o-w -av -e "ssh -i /root/.ssh/id_dsa_backup-$SRC_HOST" \
+          $* 2>&1 | tee /tmp/$$-RSYNC-$SRC_HOST         
+          if [ ${PIPESTATUS[0]} -ne 0 ] ; then
+                touch $ERRORFILE 
+                echo -e "ERROR $(basename $0)  backuping $SRC_HOST\nERROR rsync $* failed" | MAIL
+                (echo $*;echo;cat  /tmp/$$-RSYNC-$SRC_HOST ) | mail -s "Diagnotic snapshot pb" "$MAILDEST"
+          fi
+	  rm -f /tmp/$$-RSYNC-$SRC_HOST 
+  else
+	  echo Would run rsync $*
+  fi  
+}
+source $SNAPFILE
+
+#create snapshot list
+rm -f $DEST/date
+LC_ALL=C date > $DEST/date
+cd $SNAPDIR/$SRC_HOST
+echo Snapshot list > snaplist.txt
+for dir in $(find . -name snapshot\* -type d); do
+  [ -r $dir/date ] && (echo "$(basename $dir) backup date : $(cat $dir/date)" >> snaplist.txt)
+done
+echo Snapshot list available here: $SNAPDIR/$SRC_HOST/snaplist.txt
+
+if [ ! -f "$ERRORFILE" ]; then
+echo "Snapshot backup of $SRC_HOST completed with no errors" | MAIL
+else
+echo "ERROR Snapshot backup of $SRC_HOST completed WITH ERRORS" | MAIL
+fi
