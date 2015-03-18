@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This files is sourcing backup script (snap files)
 # See exemple.org.snap for parameters and usage example
@@ -40,16 +40,21 @@ snap_rotated=0
 # set io prio to idle
 ionice -c3 -p$$ 
 
+# check that INIT is called
+initialized=0
+
 fatal ()
 {
 	echo $1
-	echo -e "ERROR snapshot of $SRC_HOST `date +%Y%m%d`\n$1" | MAIL
+	echo -e "ERROR snapshot of $BACKUPED_HOST `date +%Y%m%d`\n$1" | MAIL
 	exit 1
 }
 
+
+
 rotate_snapshots ()
 {
-  SD=$SNAPDIR/$SRC_HOST/snapshot
+  SD=$DEST_DIR/$SRC_HOST/snapshot
   for version in 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180
     do [ -d $SD.$version ] || mkdir $SD.$version
   done
@@ -94,31 +99,63 @@ rotate_snapshots ()
 
 MAIL ()
 {
-  mail -s "$MAILSUBJECT" "$MAILDEST"
+  #mail -s "$MAIL_SUBJECT" "$MAIL_ADDRESS"
+  echo 
+}
+
+test_remote_host ()
+{
+  SSH="ssh -x $1@$2"
+  if [ "m$2" != "mlocalhost" ]; then
+      $SSH -Y date
+      ret=$?
+      if [ 0 -eq $ret ] ; then
+	  echo connection to $2 OK
+      else
+	  fatal "$0  : Error, server $2 unreachable"
+      fi
+  fi
+
 }
 
 INIT ()
 {
-  [ "m$SNAPDIR" == "m" ] && fatal "Please define SNAPDIR"
-  SRC_HOST=$(basename $SNAPFILE .snap)
-  [ -d $SNAPDIR ] || fatal "SNAPDIR $SNAPDIR doesnt exist"
-  [ -d $SNAPDIR/$SRC_HOST ] || mkdir -p $SNAPDIR/$SRC_HOST
-  MAILSUBJECT="[SNAP] $SRC_HOST"
-  SSH="ssh $SRC_USER@$SRC_HOST -i /root/.ssh/id_dsa_backup-$SRC_HOST"
-  RSRC=" $SRC_USER@$SRC_HOST:"
-  export ERRORFILE=/tmp/RSYNC-$SRC_HOST-ERROR
+  [ "m$DEST_DIR" == "m" ] && fatal "Please define DEST_DIR"
+  [ "m$MAIL_ADDRESS" == "m" ] && fatal "Please define MAIL_ADDRESS"
+
+  BACKUPED_HOST=$(basename $SNAPFILE .snapr)
+
+  [ "m$SOURCE_HOST" == "m" ] && SOURCE_HOST=$BACKUPED_HOST
+  MAIL_SUBJECT="[SNAP] backup $BACKUPED_HOST to $DEST_HOST (on $(hostname))"
+
+  export ERRORFILE=/tmp/RSYNC-$SOURCE_HOST-ERROR
   [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
-  DEST=$SNAPDIR/$SRC_HOST/snapshot.000/
-  echo "Starting snapshot backup of $SRC_HOST" | MAIL
-  $SSH date
-  ret=$?
-  if [ 0 -eq $ret ] ; then
-	  echo connection to $SRC_HOST OK
-  else
-	  echo "$0  : Error, server $SRC_HOST unreachable" | MAIL
-	  exit 1
+
+  if [ "m$DEST_HOST" != "mlocalhost" ]; then
+      fatal backup to distant host is not supported with this version
+  else 
+      [ -d $DEST_DIR ] || fatal "DEST_DIR $DEST_DIR doesnt exist"
+      [ -d $DEST_DIR/$BACKUPED_HOST ] || mkdir -p $DEST_DIR/$BACKUPED_HOST
   fi
+
+  if [ "m$SOURCE_HOST" == "mlocalhost" ]; then
+      REMOTE_HOST=$DEST_HOST
+      REMOTE_USER=$DEST_USER
+      DEST=$REMOTE_USER@$REMOTE_HOST:$DEST_DIR/$BACKUPED_HOST/snapshot.000/
+  else
+      REMOTE_HOST=$SOURCE_HOST
+      REMOTE_USER=$SOURCE_USER
+      DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000/
+  fi
+
+  test_remote_host $REMOTE_USER $REMOTE_HOST
+  echo "$(date "+%y%m%d-%H%M") Starting snapshot backup of $BACKUPED_HOST (on $(hostname))" | MAIL
+
+  export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
+  [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
+
   rotate_snapshots
+  initialized=1
 }
 
 RSYNC () {
@@ -130,32 +167,75 @@ RSYNC () {
 	  echo "----------------------------------"
 	  echo Running rsync $*
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
-          --chmod=u+rw,o-w -av -e "ssh -i /root/.ssh/id_dsa_backup-$SRC_HOST" \
-          $* 2>&1 | tee /tmp/$$-RSYNC-$SRC_HOST         
+          --chmod=u+rw,o-w -av -e "ssh -i /root/.ssh/id_dsa_backup-$BACKUPED_HOST" \
+          $* 2>&1 | tee /tmp/$$-RSYNC-$BACKUPED_HOST         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
                 touch $ERRORFILE 
-                echo -e "ERROR $(basename $0)  backuping $SRC_HOST\nERROR rsync $* failed" | MAIL
-                (echo $*;echo;cat  /tmp/$$-RSYNC-$SRC_HOST ) | mail -s "Diagnotic snapshot pb" "$MAILDEST"
+                echo -e "ERROR $(basename $0)  backuping $BACKUPED_HOST\nERROR rsync $* failed" | MAIL
+                (echo $*;echo;cat  /tmp/$$-RSYNC-$BACKUPED_HOST ) | mail -s "Diagnotic snapshot pb" "$MAIL_ADDRESS"
           fi
-	  rm -f /tmp/$$-RSYNC-$SRC_HOST 
+	  rm -f /tmp/$$-RSYNC-$BACKUPED_HOST 
   else
 	  echo Would run rsync $*
   fi  
 }
+
+function backup
+{
+    if [ $initialized -ne 1 ] ; then
+	    INIT
+    fi
+
+    SOURCE=$1
+    shift
+    DEST_SUBDIR=$1
+    shift 
+    export OPTIONS=$*
+
+    if [ "m$SOURCE_HOST" == "mlocalhost" ]; then
+        SRC=$SOURCE
+    else
+        SRC=$REMOTE_USER@$REMOTE_HOST:$SOURCE
+    fi
+
+    echo
+    echo "*** $(date "+%y%m%d-%H%M") Backuping $SRC to $DEST/$DEST_SUBDIR (on $(hostname))"
+    echo
+    RSYNC $OPTIONS $SOURCE $DEST/$DEST_SUBDIR 
+}
+
 source $SNAPFILE
+
 
 #create snapshot list
 rm -f $DEST/date
 LC_ALL=C date > $DEST/date
-cd $SNAPDIR/$SRC_HOST
+cd $DEST_DIR/$BACKUPED_HOST
 echo Snapshot list > snaplist.txt
 for dir in $(find . -name snapshot\* -type d); do
   [ -r $dir/date ] && (echo "$(basename $dir) backup date : $(cat $dir/date)" >> snaplist.txt)
 done
-echo Snapshot list available here: $SNAPDIR/$SRC_HOST/snaplist.txt
+echo Snapshot list available here: $DEST_DIR/$BACKUPED_HOST/snaplist.txt
 
 if [ ! -f "$ERRORFILE" ]; then
-echo "Snapshot backup of $SRC_HOST completed with no errors" | MAIL
+echo "Snapshot backup of $BACKUPED_HOST completed with no errors" | MAIL
 else
-echo "ERROR Snapshot backup of $SRC_HOST completed WITH ERRORS" | MAIL
+echo "ERROR Snapshot backup of $BACKUPED_HOST completed WITH ERRORS" | MAIL
+fi
+
+
+#### MAIL
+echo Sending mail
+if [ ! -f "$ERRORFILE" ]; then
+(
+echo "  ------ $(date "+%y%m%d-%H%M") $(basename $0) $BACKUPED_HOST to $DEST (on $(hostname)) done------"
+if [ "m$SOURCE_HOST" == "mlocalhost" ]; 
+then
+    $SSH "df -h $DEST_DIR"
+else
+    df -h $DEST_DIR
+fi
+) | MAIL
+else
+echo "$(date "+%y%m%d-%H%M") ERROR Snapshot backup of $BACKUPED_HOST (on $(hostname)) completed WITH ERRORS" | MAIL
 fi
