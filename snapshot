@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 # This files is sourcing backup script (snap files)
 # See exemple.org.snap for parameters and usage example
@@ -54,9 +54,10 @@ fatal ()
 
 rotate_snapshots ()
 {
-  SD=$DEST_DIR/$SRC_HOST/snapshot
+  SD=$1
+/snapshot
   for version in 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180
-    do [ -d $SD.$version ] || mkdir $SD.$version
+    do [ -d $SD.$version ] || mkdir -p $SD.$version
   done
 
   echo Rotating snapshots
@@ -100,7 +101,7 @@ rotate_snapshots ()
 MAIL ()
 {
   #mail -s "$MAIL_SUBJECT" "$MAIL_ADDRESS"
-  echo 
+  cat 
 }
 
 test_remote_host ()
@@ -123,7 +124,7 @@ INIT ()
   [ "m$DEST_DIR" == "m" ] && fatal "Please define DEST_DIR"
   [ "m$MAIL_ADDRESS" == "m" ] && fatal "Please define MAIL_ADDRESS"
 
-  BACKUPED_HOST=$(basename $SNAPFILE .snapr)
+  BACKUPED_HOST=$(basename $SNAPFILE .snap)
 
   [ "m$SOURCE_HOST" == "m" ] && SOURCE_HOST=$BACKUPED_HOST
   MAIL_SUBJECT="[SNAP] backup $BACKUPED_HOST to $DEST_HOST (on $(hostname))"
@@ -145,7 +146,8 @@ INIT ()
   else
       REMOTE_HOST=$SOURCE_HOST
       REMOTE_USER=$SOURCE_USER
-      DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000/
+      DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000
+      rotate_snapshots $DEST_DIR/$BACKUPED_HOST
   fi
 
   test_remote_host $REMOTE_USER $REMOTE_HOST
@@ -154,7 +156,6 @@ INIT ()
   export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
   [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
 
-  rotate_snapshots
   initialized=1
 }
 
@@ -167,7 +168,7 @@ RSYNC () {
 	  echo "----------------------------------"
 	  echo Running rsync $*
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
-          --chmod=u+rw,o-w -av -e "ssh -i /root/.ssh/id_dsa_backup-$BACKUPED_HOST" \
+          --chmod=u+rw,o-w -av -e "ssh -i $HOME/.ssh/id_dsa_backup-$BACKUPED_HOST" \
           $* 2>&1 | tee /tmp/$$-RSYNC-$BACKUPED_HOST         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
                 touch $ERRORFILE 
@@ -197,11 +198,13 @@ function backup
     else
         SRC=$REMOTE_USER@$REMOTE_HOST:$SOURCE
     fi
+    DST=$DEST/$DEST_SUBDIR 
 
     echo
     echo "*** $(date "+%y%m%d-%H%M") Backuping $SRC to $DEST/$DEST_SUBDIR (on $(hostname))"
     echo
-    RSYNC $OPTIONS $SOURCE $DEST/$DEST_SUBDIR 
+    [ -d $DST ] || mkdir -p $DST
+    RSYNC $OPTIONS $SRC $DST 
 }
 
 source $SNAPFILE
