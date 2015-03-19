@@ -43,19 +43,26 @@ ionice -c3 -p$$
 # check that INIT is called
 initialized=0
 
+
+MAIL ()
+{
+    mail -s "$1" "$MAIL_ADDRESS"
+}
+
 fatal ()
 {
 	echo $1
-	echo -e "ERROR snapshot of $BACKUPED_HOST `date +%Y%m%d`\n$1" | MAIL
+	echo -e "ERROR snapshot of $BACKUPED_HOST `date +%Y%m%d`\n$1" | MAIL 
 	exit 1
 }
+
 
 
 
 rotate_snapshots ()
 {
   SD=$1
-/snapshot
+
   for version in 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180
     do [ -d $SD.$version ] || mkdir -p $SD.$version
   done
@@ -98,12 +105,6 @@ rotate_snapshots ()
   snap_rotated=1
 }
 
-MAIL ()
-{
-  #mail -s "$MAIL_SUBJECT" "$MAIL_ADDRESS"
-  cat 
-}
-
 test_remote_host ()
 {
   SSH="ssh -x $1@$2"
@@ -127,7 +128,6 @@ INIT ()
   BACKUPED_HOST=$(basename $SNAPFILE .snap)
 
   [ "m$SOURCE_HOST" == "m" ] && SOURCE_HOST=$BACKUPED_HOST
-  MAIL_SUBJECT="[SNAP] backup $BACKUPED_HOST to $DEST_HOST (on $(hostname))"
 
   export ERRORFILE=/tmp/RSYNC-$SOURCE_HOST-ERROR
   [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
@@ -151,7 +151,7 @@ INIT ()
   fi
 
   test_remote_host $REMOTE_USER $REMOTE_HOST
-  echo "$(date "+%y%m%d-%H%M") Starting snapshot backup of $BACKUPED_HOST (on $(hostname))" | MAIL
+  echo "$(date "+%y%m%d-%H%M") Starting snapshot backup of $BACKUPED_HOST (on $(hostname))"
 
   export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
   [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
@@ -172,8 +172,6 @@ RSYNC () {
           $* 2>&1 | tee /tmp/$$-RSYNC-$BACKUPED_HOST         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
                 touch $ERRORFILE 
-                echo -e "ERROR $(basename $0)  backuping $BACKUPED_HOST\nERROR rsync $* failed" | MAIL
-                (echo $*;echo;cat  /tmp/$$-RSYNC-$BACKUPED_HOST ) | mail -s "Diagnotic snapshot pb" "$MAIL_ADDRESS"
           fi
 	  rm -f /tmp/$$-RSYNC-$BACKUPED_HOST 
   else
@@ -207,8 +205,8 @@ function backup
     RSYNC $OPTIONS $SRC $DST 
 }
 
+(
 source $SNAPFILE
-
 
 #create snapshot list
 rm -f $DEST/date
@@ -218,27 +216,34 @@ echo Snapshot list > snaplist.txt
 for dir in $(find . -name snapshot\* -type d); do
   [ -r $dir/date ] && (echo "$(basename $dir) backup date : $(cat $dir/date)" >> snaplist.txt)
 done
-echo Snapshot list available here: $DEST_DIR/$BACKUPED_HOST/snaplist.txt
 
 if [ ! -f "$ERRORFILE" ]; then
-echo "Snapshot backup of $BACKUPED_HOST completed with no errors" | MAIL
+echo "Snapshot backup of $BACKUPED_HOST completed with no errors"
 else
-echo "ERROR Snapshot backup of $BACKUPED_HOST completed WITH ERRORS" | MAIL
+echo "ERROR Snapshot backup of $BACKUPED_HOST completed WITH ERRORS"
 fi
 
-
-#### MAIL
-echo Sending mail
-if [ ! -f "$ERRORFILE" ]; then
-(
-echo "  ------ $(date "+%y%m%d-%H%M") $(basename $0) $BACKUPED_HOST to $DEST (on $(hostname)) done------"
+echo Snapshot list 
+cat $DEST_DIR/$BACKUPED_HOST/snaplist.txt
 if [ "m$SOURCE_HOST" == "mlocalhost" ]; 
 then
     $SSH "df -h $DEST_DIR"
 else
     df -h $DEST_DIR
 fi
-) | MAIL
-else
-echo "$(date "+%y%m%d-%H%M") ERROR Snapshot backup of $BACKUPED_HOST (on $(hostname)) completed WITH ERRORS" | MAIL
+
+if [ -f "$ERRORFILE" ]; then
+    cat  /tmp/$$-RSYNC-$BACKUPED_HOST
 fi
+    
+) >> /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log
+
+
+HOSTNAME=$(hostname)
+if [ -f "$ERRORFILE" ]; then
+    MAIL_SUBJECT="$(date "+%y%m%d-%H%M") ERROR Snapshot backup of $BACKUPED_HOST (on $HOSTNAME) completed WITH ERRORS"
+else
+    MAIL_SUBJECT=$(echo "$(date "+%y%m%d-%H%M") Snapshot backup of $BACKUPED_HOST (on $HOSTNAME) completed WITHOUT ERRORS")
+fi
+
+cat  /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log | MAIL "$MAIL_SUBJECT"
