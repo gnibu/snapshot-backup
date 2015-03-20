@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This files is sourcing backup script (snap files)
 # See exemple.org.snap for parameters and usage example
@@ -25,6 +25,8 @@ fi
 
 SNAPFILE=$1
 DRYRUN=0
+MAIL_ADDRESS=""
+
 if [ $# -eq 2 ] ; then
 	if [ "m$2" = "m-d" ] ; then
 		echo "Dry run for rsync (rotation is done)"
@@ -179,7 +181,7 @@ RSYNC () {
   fi  
 }
 
-function backup
+function dobackup
 {
     if [ $initialized -ne 1 ] ; then
 	    INIT
@@ -205,9 +207,18 @@ function backup
     RSYNC $OPTIONS $SRC $DST 
 }
 
-(
-source $SNAPFILE
+commands=""
+backup ()
+{
+    commands="$commands\n$*"   
+}
 
+source $SNAPFILE
+printf $commands | while read command; do 
+    echo "Command: $command"
+done
+
+(
 #create snapshot list
 rm -f $DEST/date
 LC_ALL=C date > $DEST/date
