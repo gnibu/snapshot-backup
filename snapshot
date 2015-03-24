@@ -6,7 +6,7 @@
 # Backup when launch every day will keep snapshots from approx
 # 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180 days ago
 
-# You should'nt have to change anything in this script which is for internal use
+# You shouldn't have to change anything in this script which is for internal use
 
 # ssh configuration: for more security,  you can add something like the line after
 # before the key used in your .ssh/authorized_key2 file
@@ -49,6 +49,7 @@ initialized=0
 MAIL ()
 {
     mail -s "$1" "$MAIL_ADDRESS"
+    #cat
 }
 
 fatal ()
@@ -79,6 +80,8 @@ rotate_snapshots ()
       mv $SD.060 $SD.090 &&\
       cp -al $SD.030 $SD.060
   fi
+
+  ret=$?
   
   #rotation every 5 days
   if [ $(($(date "+%-d")%5)) -eq 2 ]; then
@@ -90,6 +93,8 @@ rotate_snapshots ()
       cp -al $SD.005 $SD.010
   fi
 
+  ret=$(($?+$ret))
+
   #rotation every day (one lauch per day)
   rm -rf $SD.005 &&\
   mv $SD.004 $SD.005 &&\
@@ -98,7 +103,9 @@ rotate_snapshots ()
   mv $SD.001 $SD.002 &&\
   cp -al $SD.000 $SD.001
 
-  if [ 0 -eq $? ] ; then
+  ret=$(($?+$ret))
+
+  if [ $ret -eq 0 ] ; then
 	  echo Rotation OK
   else
 	  echo Error during snap rotation
@@ -149,14 +156,11 @@ INIT ()
       REMOTE_HOST=$SOURCE_HOST
       REMOTE_USER=$SOURCE_USER
       DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000
-      rotate_snapshots $DEST_DIR/$BACKUPED_HOST
+      rotate_snapshots $DEST_DIR/$BACKUPED_HOST/snapshot
   fi
 
   test_remote_host $REMOTE_USER $REMOTE_HOST
   echo "$(date "+%y%m%d-%H%M") Starting snapshot backup of $BACKUPED_HOST (on $(hostname))"
-
-  export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
-  [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
 
   initialized=1
 }
@@ -166,14 +170,12 @@ RSYNC () {
 	  fatal "INIT has not been called"
   fi
   if [ $DRYRUN -ne 1 ] ; then
-	  echo
-	  echo "----------------------------------"
-	  echo Running rsync $*
+	  echo "-- Running rsync $*"
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
           --chmod=u+rw,o-w -av -e "ssh -i $HOME/.ssh/id_dsa_backup-$BACKUPED_HOST" \
           $* 2>&1 | tee /tmp/$$-RSYNC-$BACKUPED_HOST         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
-                touch $ERRORFILE 
+	      cat /tmp/$$-RSYNC-$BACKUPED_HOST >> $ERRORFILE
           fi
 	  rm -f /tmp/$$-RSYNC-$BACKUPED_HOST 
   else
@@ -208,17 +210,38 @@ function dobackup
 }
 
 commands=""
+# Create the call stack, dobackup do the actual backup
 backup ()
 {
-    commands="$commands\n$*"   
+    if [ "q$commands" != "q" ]; then
+	commands="$commands\n$*"
+    else	
+	commands="$*"
+    fi
 }
 
+# fill the backup PATH queue
 source $SNAPFILE
-printf $commands | while read command; do 
-    echo "Command: $command"
+
+#export stuff for the sub process
+export DEST_USER
+export DEST_HOST
+export DEST_DIR
+export MAIL_ADDRESS
+export SOURCE_USER
+export SOURCE_HOST
+export commands
+
+# do the backup in a subprocess to get stdout 
+(
+
+INIT
+
+# run all schedule backups
+echo -e $commands | while read command; do 
+    dobackup $command
 done
 
-(
 #create snapshot list
 rm -f $DEST/date
 LC_ALL=C date > $DEST/date
@@ -234,8 +257,12 @@ else
 echo "ERROR Snapshot backup of $BACKUPED_HOST completed WITH ERRORS"
 fi
 
-echo Snapshot list 
+echo
+
 cat $DEST_DIR/$BACKUPED_HOST/snaplist.txt
+
+echo
+
 if [ "m$SOURCE_HOST" == "mlocalhost" ]; 
 then
     $SSH "df -h $DEST_DIR"
@@ -244,7 +271,7 @@ else
 fi
 
 if [ -f "$ERRORFILE" ]; then
-    cat  /tmp/$$-RSYNC-$BACKUPED_HOST
+    cat  $ERRORFILE
 fi
     
 ) >> /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log
