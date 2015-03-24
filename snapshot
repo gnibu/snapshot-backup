@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 # This files is sourcing backup script (snap files)
 # See exemple.org.snap for parameters and usage example
@@ -120,6 +120,7 @@ test_remote_host ()
   if [ "m$2" != "mlocalhost" ]; then
       $SSH -Y date
       ret=$?
+      echo
       if [ 0 -eq $ret ] ; then
 	  echo connection to $2 OK
       else
@@ -173,7 +174,7 @@ RSYNC () {
 	  echo "-- Running rsync $*"
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
           --chmod=u+rw,o-w -av -e "ssh -i $HOME/.ssh/id_dsa_backup-$BACKUPED_HOST" \
-          $* 2>&1 | tee /tmp/$$-RSYNC-$BACKUPED_HOST         
+          $* 2>&1 > /tmp/$$-RSYNC-$BACKUPED_HOST         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
 	      cat /tmp/$$-RSYNC-$BACKUPED_HOST >> $ERRORFILE
           fi
@@ -231,6 +232,7 @@ export MAIL_ADDRESS
 export SOURCE_USER
 export SOURCE_HOST
 export commands
+
 
 # do the backup in a subprocess to get stdout 
 (
