@@ -134,12 +134,8 @@ INIT ()
 {
   [ "m$DEST_DIR" == "m" ] && fatal "Please define DEST_DIR"
   [ "m$MAIL_ADDRESS" == "m" ] && fatal "Please define MAIL_ADDRESS"
-
-  BACKUPED_HOST=$(basename $SNAPFILE .snap)
-
   [ "m$SOURCE_HOST" == "m" ] && SOURCE_HOST=$BACKUPED_HOST
 
-  export ERRORFILE=/tmp/RSYNC-$SOURCE_HOST-ERROR
   [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
 
   if [ "m$DEST_HOST" != "mlocalhost" ]; then
@@ -170,15 +166,17 @@ RSYNC () {
   if [ $snap_rotated -ne 1 ] ; then
 	  fatal "INIT has not been called"
   fi
+  TMPFILE=/tmp/$$-RSYNC-$BACKUPED_HOST
   if [ $DRYRUN -ne 1 ] ; then
-	  echo "-- Running rsync $*"
+	  echo "   -- Running rsync $*"
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
           --chmod=u+rw,o-w -av -e "ssh -i $HOME/.ssh/id_dsa_backup-$BACKUPED_HOST" \
-          $* 2>&1 > /tmp/$$-RSYNC-$BACKUPED_HOST         
+          $* 2>&1 > $TMPFILE         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
-	      cat /tmp/$$-RSYNC-$BACKUPED_HOST >> $ERRORFILE
+	      touch $ERRORFILE
+	      cat $TMPFILE >> $ERRORFILE
           fi
-	  rm -f /tmp/$$-RSYNC-$BACKUPED_HOST 
+	  rm -f $TMPFILE
   else
 	  echo Would run rsync $*
   fi  
@@ -232,7 +230,8 @@ export MAIL_ADDRESS
 export SOURCE_USER
 export SOURCE_HOST
 export commands
-
+export ERRORFILE=/tmp/RSYNC-$SOURCE_HOST-ERROR
+export BACKUPED_HOST=$(basename $SNAPFILE .snap)
 
 # do the backup in a subprocess to get stdout 
 (
@@ -252,30 +251,7 @@ echo Snapshot list > snaplist.txt
 for dir in $(find . -name snapshot\* -type d); do
   [ -r $dir/date ] && (echo "$(basename $dir) backup date : $(cat $dir/date)" >> snaplist.txt)
 done
-
-if [ ! -f "$ERRORFILE" ]; then
-echo "Snapshot backup of $BACKUPED_HOST completed with no errors"
-else
-echo "ERROR Snapshot backup of $BACKUPED_HOST completed WITH ERRORS"
-fi
-
-echo
-
-cat $DEST_DIR/$BACKUPED_HOST/snaplist.txt
-
-echo
-
-if [ "m$SOURCE_HOST" == "mlocalhost" ]; 
-then
-    $SSH "df -h $DEST_DIR"
-else
-    df -h $DEST_DIR
-fi
-
-if [ -f "$ERRORFILE" ]; then
-    cat  $ERRORFILE
-fi
-    
+   
 ) >> /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log
 
 
@@ -286,4 +262,40 @@ else
     MAIL_SUBJECT=$(echo "$(date "+%y%m%d-%H%M") Snapshot backup of $BACKUPED_HOST (on $HOSTNAME) completed WITHOUT ERRORS")
 fi
 
-cat  /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log | MAIL "$MAIL_SUBJECT"
+(
+
+if [ ! -f "$ERRORFILE" ]; then
+echo "Snapshot backup of $BACKUPED_HOST completed with no errors"
+else
+echo "ERROR Snapshot backup of $BACKUPED_HOST completed WITH ERRORS"
+fi
+
+echo
+
+# Display some stats
+if [ "m$SOURCE_HOST" = "mlocalhost" ]; 
+then
+    echo FIXME call distant du and df
+    exit 1
+fi
+echo -- Disk space available $DEST_DIR
+df -h $DEST_DIR
+echo
+echo -- Last snapshot disk space $DEST_DIR/$BACKUPED_HOST/snapshot.000
+du -hs $DEST_DIR/$BACKUPED_HOST/snapshot.000/*
+echo
+cat $DEST_DIR/$BACKUPED_HOST/snaplist.txt
+
+echo
+echo ----------------------------------------
+echo
+echo Detailled log
+echo -------------
+
+cat  /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log 
+
+if [ -f "$ERRORFILE" ]; then
+    cat  $ERRORFILE
+fi
+
+)| MAIL "$MAIL_SUBJECT"
