@@ -170,7 +170,7 @@ RSYNC () {
   if [ $DRYRUN -ne 1 ] ; then
 	  echo "   -- Running rsync $*"
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
-          --chmod=u+rw,o-w -av -e "ssh -i $HOME/.ssh/id_dsa_backup-$BACKUPED_HOST" \
+          --chmod=u+rw,o-w -av -e "ssh -i $SSH_KEY" \
           $* 2>&1 > $TMPFILE         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
 	      touch $ERRORFILE
@@ -232,6 +232,8 @@ export SOURCE_HOST
 export commands
 export ERRORFILE=/tmp/RSYNC-$SOURCE_HOST-ERROR
 export BACKUPED_HOST=$(basename $SNAPFILE .snap)
+[ "$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
+export SSH_KEY
 
 # do the backup in a subprocess to get stdout 
 (
