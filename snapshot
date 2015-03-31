@@ -56,6 +56,7 @@ fatal ()
 {
 	echo $1
 	echo -e "ERROR snapshot of $BACKUPED_HOST `date +%Y%m%d`\n$1" | MAIL 
+	touch $ERRORFILE
 	exit 1
 }
 
@@ -116,7 +117,7 @@ rotate_snapshots ()
 
 test_remote_host ()
 {
-  SSH="ssh -x $1@$2"
+  SSH="ssh -i $SSH_KEY -x $1@$2"
   if [ "m$2" != "mlocalhost" ]; then
       $SSH -Y date
       ret=$?
