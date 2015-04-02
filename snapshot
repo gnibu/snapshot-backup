@@ -1,16 +1,9 @@
 #!/bin/bash
 
 # This files is sourcing backup script (snap files)
-# See exemple.org.snap for parameters and usage example
-
-# Backup when launch every day will keep snapshots from approx
-# 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180 days ago
+# See README.md for parameters and usage example
 
 # You shouldn't have to change anything in this script which is for internal use
-
-# ssh configuration: for more security,  you can add something like the line after
-# before the key used in your .ssh/authorized_key2 file
-#  command="echo $SSH_ORIGINAL_COMMAND >> ~/ssh_commands.log ; echo $SSH_ORIGINAL_COMMAND | egrep -q '^(rsync --server --sender -vlogDtpr . /(var|etc|root|home)|date)$' &&  eval $SSH_ORIGINAL_COMMAND",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,from="snapshoting.host.org" 
 
 usage ()
 {
@@ -177,6 +170,7 @@ RSYNC () {
 	      touch $ERRORFILE
 	      cat $TMPFILE >> $ERRORFILE
           fi
+          [ "$VERBOSE" == "true" ] && cat $TMPFILE 
 	  rm -f $TMPFILE
   else
 	  echo Would run rsync $*
@@ -231,8 +225,9 @@ export MAIL_ADDRESS
 export SOURCE_USER
 export SOURCE_HOST
 export commands
-export ERRORFILE=/tmp/RSYNC-$SOURCE_HOST-ERROR
+export VERBOSE
 export BACKUPED_HOST=$(basename $SNAPFILE .snap)
+export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
 [ "$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
 export SSH_KEY
 
@@ -298,6 +293,9 @@ echo -------------
 cat  /tmp/$$-SNAPSHOT-$BACKUPED_HOST.log 
 
 if [ -f "$ERRORFILE" ]; then
+    echo
+    echo Error log
+    echo -------------
     cat  $ERRORFILE
 fi
 
