@@ -44,6 +44,7 @@ Name the file after the host you want to backup samplehost.example.org
 The user must have access ssh access to the source host or alternatively you cam specify an ssh key.
 
 Then run the backup 
+
      snapshot samplehost.example.org
 
 Place the line above in a cron
@@ -54,5 +55,6 @@ Advanced configuration
 ----------------------
 
 ssh configuration: for more security,  you can add something like the line after before the key used in your .ssh/authorized_key2 file
+
     command="echo $SSH_ORIGINAL_COMMAND >> ~/ssh_commands.log ; echo $SSH_ORIGINAL_COMMAND | egrep -q '^(rsync --server --sender -vlogDtpr . /(var|etc|root|home)|date)$' &&  eval $SSH_ORIGINAL_COMMAND",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,from="snapshoting.host.org" 
 
