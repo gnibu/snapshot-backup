@@ -15,8 +15,9 @@ Create a file with the following content
        MAIL_ADDRESS=you@example.com
        SOURCE_USER=root
        
-       #options
+       # OPTIONS
        SSH_KEY=~backup/.ssh/id_backup-server
+       SSH_PORT=42
        VERBOSE=true
        
        ########################

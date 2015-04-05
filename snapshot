@@ -61,7 +61,7 @@ rotate_snapshots ()
   SD=$1
 
   for version in 000 001 002 003 004 005 010 015 020 025 030 060 090 120 150 180
-    do [ -d $SD.$version ] || mkdir -p $SD.$version
+  do [ -d $SD.$version ] || mkdir -p $SD.$version
   done
 
   echo Rotating snapshots
@@ -110,7 +110,7 @@ rotate_snapshots ()
 
 test_remote_host ()
 {
-  SSH="ssh -i $SSH_KEY -x $1@$2"
+  SSH="ssh $SSH_OPTIONS -x $1@$2"
   if [ "m$2" != "mlocalhost" ]; then
       $SSH -Y date
       ret=$?
@@ -164,7 +164,7 @@ RSYNC () {
   if [ $DRYRUN -ne 1 ] ; then
 	  echo "   -- Running rsync $*"
 	  nice -n 19 rsync --perms --delete --max-delete=5000 \
-          --chmod=u+rw,o-w -av -e "ssh -i $SSH_KEY" \
+          --chmod=u+rw,o-w -av -e "ssh $SSH_OPTIONS " \
           $* 2>&1 > $TMPFILE         
           if [ ${PIPESTATUS[0]} -ne 0 ] ; then
 	      touch $ERRORFILE
@@ -228,8 +228,11 @@ export commands
 export VERBOSE
 export BACKUPED_HOST=$(basename $SNAPFILE .snap)
 export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
-[ "$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
+[ "m$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
 export SSH_KEY
+SSH_OPTIONS="-i $SSH_KEY"
+[ "m$SSH_PORT" != "m" ] && SSH_OPTIONS="$SSH_OPTION -p $SSH_PORT"
+export SSH_OPTIONS
 
 # do the backup in a subprocess to get stdout 
 (
