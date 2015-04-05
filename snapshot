@@ -231,7 +231,7 @@ export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
 [ "m$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
 export SSH_KEY
 SSH_OPTIONS="-i $SSH_KEY"
-[ "m$SSH_PORT" != "m" ] && SSH_OPTIONS="$SSH_OPTION -p $SSH_PORT"
+[ "m$SSH_PORT" != "m" ] && SSH_OPTIONS="$SSH_OPTIONS -p $SSH_PORT"
 export SSH_OPTIONS
 
 # do the backup in a subprocess to get stdout 
