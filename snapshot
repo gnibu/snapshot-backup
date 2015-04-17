@@ -258,9 +258,9 @@ done
 
 HOSTNAME=$(hostname)
 if [ -f "$ERRORFILE" ]; then
-    MAIL_SUBJECT="$(date "+%y%m%d-%H%M") ERROR Snapshot backup of $BACKUPED_HOST (on $HOSTNAME) completed WITH ERRORS"
+    MAIL_SUBJECT="[snapshot] (ERROR) $BACKUPED_HOST (on $HOSTNAME) $(date "+%y%m%d-%H%M")"
 else
-    MAIL_SUBJECT=$(echo "$(date "+%y%m%d-%H%M") Snapshot backup of $BACKUPED_HOST (on $HOSTNAME) completed WITHOUT ERRORS")
+    MAIL_SUBJECT="[snapshot] (OK) $BACKUPED_HOST (on $HOSTNAME) $(date "+%y%m%d-%H%M")"
 fi
 
 (
