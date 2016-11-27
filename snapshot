@@ -33,7 +33,10 @@ fi
 snap_rotated=0
 
 # set io prio to idle
-ionice -c3 -p$$ 
+which -s ionice
+if [[ $? -eq 0 ]]; then
+    ionice -c3 -p$$ 
+fi
 
 # check that INIT is called
 initialized=0
