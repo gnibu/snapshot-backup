@@ -44,7 +44,12 @@ initialized=0
 
 MAIL ()
 {
-    mail -s "$1" "$MAIL_ADDRESS"
+    which -s mutt
+    MAIL_COMMAND="mail"
+    if [[ $? -eq 0 ]]; then
+        MAIL_COMMAND="mutt" 
+    fi
+    $MAIL_COMMAND -s "$1" "$MAIL_ADDRESS"
     #cat
 }
 
@@ -140,7 +145,7 @@ INIT ()
   [ -d $DEST_DIR/$BACKUPED_HOST ] || mkdir -p $DEST_DIR/$BACKUPED_HOST
 
   if [ "m$SOURCE_HOST" != "mlocalhost" ]; then
-      test_remote_host $REMOTE_USER $REMOTE_HOST
+      test_remote_host $DEST_USER $DEST_HOST
   fi
 
   DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000
@@ -158,16 +163,9 @@ RSYNC () {
   TMPFILE=/tmp/$$-RSYNC-$BACKUPED_HOST
   if [ $DRYRUN -ne 1 ] ; then
       echo "   -- Running rsync $*"
-      if [ m$SOURCE_HOST != "localhost"]; then     
-          nice -n 19 rsync --perms --delete --max-delete=5000 \
+      nice -n 19 rsync --perms --delete --max-delete=5000 \
                --chmod=u+rw,o-w -av -e "ssh $SSH_OPTIONS " \
                $* 2>&1 > $TMPFILE
-      else
-          # TODO FIX code duplication
-          nice -n 19 rsync --perms --delete --max-delete=5000 \
-               --chmod=u+rw,o-w -av \
-               $* 2>&1 > $TMPFILE
-      fi
       
       if [ ${PIPESTATUS[0]} -ne 0 ] ; then
 	  touch $ERRORFILE
@@ -195,7 +193,7 @@ function dobackup
     if [ "m$SOURCE_HOST" == "mlocalhost" ]; then
         SRC=$SOURCE
     else
-        SRC=$REMOTE_USER@$REMOTE_HOST:$SOURCE
+        SRC=$SOURCE_USER@$SOURCE_HOST:$SOURCE
     fi
     DST=$DEST/$DEST_SUBDIR 
 
@@ -229,15 +227,14 @@ export SOURCE_HOST
 export commands
 export VERBOSE
 
+export BACKUPED_HOST=$(basename $SNAPFILE .snap)
+
 if [ "m$SOURCE_HOST" != "mlocalhost" ]; then
-    export BACKUPED_HOST=$(basename $SNAPFILE .snap)
     [ "m$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
     export SSH_KEY
     SSH_OPTIONS="-i $SSH_KEY"
     [ "m$SSH_PORT" != "m" ] && SSH_OPTIONS="$SSH_OPTIONS -p $SSH_PORT"
     export SSH_OPTIONS
-else
-    export BACKUPED_HOST="localhost"
 fi
 
 export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
@@ -266,6 +263,7 @@ done
 
 
 HOSTNAME=$(hostname)
+
 if [ -f "$ERRORFILE" ]; then
     MAIL_SUBJECT="[snapshot] (ERROR) $BACKUPED_HOST (on $HOSTNAME) $(date "+%y%m%d-%H%M")"
 else
