@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This files is sourcing backup script (snap files)
 # See README.md for parameters and usage example
@@ -7,13 +7,13 @@
 
 usage ()
 {
-	echo "Usage: $(basename $0) snapfile.snap [options]"
-	echo "Options: -d => dry run for rsync (rotation is done)"
+    echo "Usage: $(basename $0) snapfile.snap [options]"
+    echo "Options: -d => dry run for rsync (rotation is done)"
 }
 
 if [ $# -lt 1 ] ; then
-	usage
-	exit 1
+    usage
+    exit 1
 fi
 
 SNAPFILE=$1
@@ -21,12 +21,12 @@ DRYRUN=0
 MAIL_ADDRESS=""
 
 if [ $# -eq 2 ] ; then
-	if [ "m$2" = "m-d" ] ; then
-		echo "Dry run for rsync (rotation is done)"
-		DRYRUN=1
-	else
-		usage
-	fi
+    if [ "m$2" = "m-d" ] ; then
+	echo "Dry run for rsync (rotation is done)"
+	DRYRUN=1
+    else
+	usage
+    fi
 fi
 
 # Memorize if snaps have been rotated 
@@ -50,13 +50,11 @@ MAIL ()
 
 fatal ()
 {
-	echo $1
-	echo -e "ERROR snapshot of $BACKUPED_HOST `date +%Y%m%d`\n$1" | MAIL 
-	touch $ERRORFILE
-	exit 1
+    echo $1
+    echo -e "ERROR snapshot of $BACKUPED_HOST `date +%Y%m%d`\n$1" | MAIL 
+    touch $ERRORFILE
+    exit 1
 }
-
-
 
 
 rotate_snapshots ()
@@ -103,28 +101,27 @@ rotate_snapshots ()
   ret=$(($?+$ret))
 
   if [ $ret -eq 0 ] ; then
-	  echo Rotation OK
+      echo Rotation OK
   else
-	  echo Error during snap rotation
-	  exit 1
+      echo Error during snap rotation
+      exit 1
   fi
   snap_rotated=1
 }
 
 test_remote_host ()
 {
-  SSH="ssh $SSH_OPTIONS -x $1@$2"
-  if [ "m$2" != "mlocalhost" ]; then
-      $SSH -Y date
-      ret=$?
-      echo
-      if [ 0 -eq $ret ] ; then
-	  echo connection to $2 OK
-      else
-	  fatal "$0  : Error, server $2 unreachable"
-      fi
-  fi
-
+    SSH="ssh $SSH_OPTIONS -x $1@$2"
+    if [ "m$2" != "mlocalhost" ]; then
+        $SSH -Y date
+        ret=$?
+        echo
+        if [ 0 -eq $ret ] ; then
+	    echo connection to $2 OK
+        else
+	    fatal "$0  : Error, server $2 unreachable"
+        fi
+    fi
 }
 
 INIT ()
@@ -137,23 +134,18 @@ INIT ()
 
   if [ "m$DEST_HOST" != "mlocalhost" ]; then
       fatal backup to distant host is not supported with this version
-  else 
-      [ -d $DEST_DIR ] || fatal "DEST_DIR $DEST_DIR doesnt exist"
-      [ -d $DEST_DIR/$BACKUPED_HOST ] || mkdir -p $DEST_DIR/$BACKUPED_HOST
+  fi
+  
+  [ -d $DEST_DIR ] || fatal "DEST_DIR $DEST_DIR doesnt exist"
+  [ -d $DEST_DIR/$BACKUPED_HOST ] || mkdir -p $DEST_DIR/$BACKUPED_HOST
+
+  if [ "m$SOURCE_HOST" != "mlocalhost" ]; then
+      test_remote_host $REMOTE_USER $REMOTE_HOST
   fi
 
-  if [ "m$SOURCE_HOST" == "mlocalhost" ]; then
-      REMOTE_HOST=$DEST_HOST
-      REMOTE_USER=$DEST_USER
-      DEST=$REMOTE_USER@$REMOTE_HOST:$DEST_DIR/$BACKUPED_HOST/snapshot.000/
-  else
-      REMOTE_HOST=$SOURCE_HOST
-      REMOTE_USER=$SOURCE_USER
-      DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000
-      rotate_snapshots $DEST_DIR/$BACKUPED_HOST/snapshot
-  fi
-
-  test_remote_host $REMOTE_USER $REMOTE_HOST
+  DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000
+  
+  rotate_snapshots $DEST_DIR/$BACKUPED_HOST/snapshot
   echo "$(date "+%y%m%d-%H%M") Starting snapshot backup of $BACKUPED_HOST (on $(hostname))"
 
   initialized=1
@@ -165,33 +157,41 @@ RSYNC () {
   fi
   TMPFILE=/tmp/$$-RSYNC-$BACKUPED_HOST
   if [ $DRYRUN -ne 1 ] ; then
-	  echo "   -- Running rsync $*"
-	  nice -n 19 rsync --perms --delete --max-delete=5000 \
-          --chmod=u+rw,o-w -av -e "ssh $SSH_OPTIONS " \
-          $* 2>&1 > $TMPFILE         
-          if [ ${PIPESTATUS[0]} -ne 0 ] ; then
-	      touch $ERRORFILE
-	      cat $TMPFILE >> $ERRORFILE
-          fi
-          [ "$VERBOSE" == "true" ] && cat $TMPFILE 
-	  rm -f $TMPFILE
+      echo "   -- Running rsync $*"
+      if [ m$SOURCE_HOST != "localhost"]; then     
+          nice -n 19 rsync --perms --delete --max-delete=5000 \
+               --chmod=u+rw,o-w -av -e "ssh $SSH_OPTIONS " \
+               $* 2>&1 > $TMPFILE
+      else
+          # TODO FIX code duplication
+          nice -n 19 rsync --perms --delete --max-delete=5000 \
+               --chmod=u+rw,o-w -av \
+               $* 2>&1 > $TMPFILE
+      fi
+      
+      if [ ${PIPESTATUS[0]} -ne 0 ] ; then
+	  touch $ERRORFILE
+	  cat $TMPFILE >> $ERRORFILE
+      fi
+      [ "$VERBOSE" == "true" ] && cat $TMPFILE 
+      rm -f $TMPFILE
   else
-	  echo Would run rsync $*
+      echo Would run rsync $*
   fi  
 }
 
 function dobackup
 {
     if [ $initialized -ne 1 ] ; then
-	    INIT
+	INIT
     fi
-
+    
     SOURCE=$1
     shift
     DEST_SUBDIR=$1
     shift 
     export OPTIONS=$*
-
+    
     if [ "m$SOURCE_HOST" == "mlocalhost" ]; then
         SRC=$SOURCE
     else
@@ -221,7 +221,6 @@ backup ()
 source $SNAPFILE
 
 #export stuff for the sub process
-export DEST_USER
 export DEST_HOST
 export DEST_DIR
 export MAIL_ADDRESS
@@ -229,13 +228,20 @@ export SOURCE_USER
 export SOURCE_HOST
 export commands
 export VERBOSE
-export BACKUPED_HOST=$(basename $SNAPFILE .snap)
+
+if [ "m$SOURCE_HOST" != "mlocalhost" ]; then
+    export BACKUPED_HOST=$(basename $SNAPFILE .snap)
+    [ "m$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
+    export SSH_KEY
+    SSH_OPTIONS="-i $SSH_KEY"
+    [ "m$SSH_PORT" != "m" ] && SSH_OPTIONS="$SSH_OPTIONS -p $SSH_PORT"
+    export SSH_OPTIONS
+else
+    export BACKUPED_HOST="localhost"
+fi
+
 export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
-[ "m$SSH_KEY" == "m" ] && SSH_KEY=$HOME/.ssh/id_dsa_backup-$BACKUPED_HOST
-export SSH_KEY
-SSH_OPTIONS="-i $SSH_KEY"
-[ "m$SSH_PORT" != "m" ] && SSH_OPTIONS="$SSH_OPTIONS -p $SSH_PORT"
-export SSH_OPTIONS
+   
 
 # do the backup in a subprocess to get stdout 
 (
@@ -277,11 +283,6 @@ fi
 echo
 
 # Display some stats
-if [ "m$SOURCE_HOST" = "mlocalhost" ]; 
-then
-    echo FIXME call distant du and df
-    exit 1
-fi
 echo -- Disk space available $DEST_DIR
 df -h $DEST_DIR
 echo
