@@ -163,7 +163,7 @@ RSYNC () {
   TMPFILE=/tmp/$$-RSYNC-$BACKUPED_HOST
   if [ $DRYRUN -ne 1 ] ; then
       echo "   -- Running rsync $*"
-      nice -n 19 rsync --perms --delete --max-delete=5000 \
+      nice -n 19 rsync --perms --delete $RSYNC_OPTIONS --max-delete=5000 \
                --chmod=u+rw,o-w -av -e "ssh $SSH_OPTIONS " \
                $* 2>&1 > $TMPFILE
       
@@ -226,6 +226,7 @@ export SOURCE_USER
 export SOURCE_HOST
 export commands
 export VERBOSE
+export RSYNC_OPTIONS
 
 export BACKUPED_HOST=$(basename $SNAPFILE .snap)
 
