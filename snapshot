@@ -71,6 +71,9 @@ rotate_snapshots ()
   done
 
   echo Rotating snapshots
+
+  ret=0
+
   #rotation every month
   if [ $(date "+%-d") -eq 27 ]; then
 	  rm -rf $SD.180 &&\
@@ -78,11 +81,10 @@ rotate_snapshots ()
       mv $SD.120 $SD.150 &&\
       mv $SD.090 $SD.120 &&\
       mv $SD.060 $SD.090 &&\
-      cp -al $SD.030 $SD.060
+      cp -alu $SD.030 $SD.060
+      ret=$(($?+$ret))
   fi
 
-  ret=$?
-  
   #rotation every 5 days
   if [ $(($(date "+%-d")%5)) -eq 2 ]; then
 	  rm -rf $SD.030 &&\
@@ -90,10 +92,9 @@ rotate_snapshots ()
       mv $SD.020 $SD.025 &&\
       mv $SD.015 $SD.020 &&\
       mv $SD.010 $SD.015 &&\
-      cp -al $SD.005 $SD.010
+      cp -alu $SD.005 $SD.010
+      ret=$(($?+$ret))
   fi
-
-  ret=$(($?+$ret))
 
   #rotation every day (one lauch per day)
   rm -rf $SD.005 &&\
@@ -101,7 +102,7 @@ rotate_snapshots ()
   mv $SD.003 $SD.004 &&\
   mv $SD.002 $SD.003 &&\
   mv $SD.001 $SD.002 &&\
-  cp -al $SD.000 $SD.001
+  cp -alu $SD.000 $SD.001
 
   ret=$(($?+$ret))
 
@@ -138,7 +139,7 @@ INIT ()
   [ -f  $ERRORFILE ] && rm -f $ERRORFILE 
 
   if [ "m$DEST_HOST" != "mlocalhost" ]; then
-      fatal backup to distant host is not supported with this version
+      fatal backup to distant host is not supportwith this version
   fi
   
   [ -d $DEST_DIR ] || fatal "DEST_DIR $DEST_DIR doesnt exist"
@@ -162,7 +163,8 @@ RSYNC () {
   fi
   TMPFILE=/tmp/$$-RSYNC-$BACKUPED_HOST
   if [ $DRYRUN -ne 1 ] ; then
-      echo "   -- Running rsync $*"
+      echo "-- Running rsync  --perms --delete $RSYNC_OPTIONS --max-delete=5000 \
+--chmod=u+rw,o-w -av -e \"ssh $SSH_OPTIONS \" $*"
       nice -n 19 rsync --perms --delete $RSYNC_OPTIONS --max-delete=5000 \
                --chmod=u+rw,o-w -av -e "ssh $SSH_OPTIONS " \
                $* 2>&1 > $TMPFILE
