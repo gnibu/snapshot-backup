@@ -258,7 +258,7 @@ rm -f $DEST/date
 LC_ALL=C date > $DEST/date
 cd $DEST_DIR/$BACKUPED_HOST
 echo Snapshot list > snaplist.txt
-for dir in $(find . -name snapshot\* -type d); do
+for dir in $(find . -name snapshot\* -maxdepth 1 -type d); do
   [ -r $dir/date ] && (echo "$(basename $dir) backup date : $(cat $dir/date)" >> snaplist.txt)
 done
    
