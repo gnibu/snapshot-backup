@@ -110,6 +110,7 @@ rotate_snapshots ()
       echo Rotation OK
   else
       echo Error during snap rotation
+	  touch $ERRORFILE
       exit 1
   fi
   snap_rotated=1
@@ -184,6 +185,9 @@ function dobackup
 {
     if [ $initialized -ne 1 ] ; then
 	INIT
+    fi
+    if [ $initialized -ne 1 ] ; then
+    exit 1
     fi
     
     SOURCE=$1
