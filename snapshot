@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This files is sourcing backup script (snap files)
 # See README.md for parameters and usage example
@@ -61,6 +61,11 @@ fatal ()
     exit 1
 }
 
+logcmd ()
+{
+n    echo $* >&2
+    $*
+}
 
 rotate_snapshots ()
 {
@@ -76,33 +81,33 @@ rotate_snapshots ()
 
   #rotation every month
   if [ $(date "+%-d") -eq 27 ]; then
-	  rm -rf $SD.180 &&\
+	  logcmd rm -rf $SD.180 &&\
       mv $SD.150 $SD.180 &&\
       mv $SD.120 $SD.150 &&\
       mv $SD.090 $SD.120 &&\
       mv $SD.060 $SD.090 &&\
-      cp -alu $SD.030 $SD.060
+      logcmd cp -alu $SD.030 $SD.060
       ret=$(($?+$ret))
   fi
 
   #rotation every 5 days
   if [ $(($(date "+%-d")%5)) -eq 2 ]; then
-	  rm -rf $SD.030 &&\
+	  logcmd rm -rf $SD.030 &&\
       mv $SD.025 $SD.030 &&\
       mv $SD.020 $SD.025 &&\
       mv $SD.015 $SD.020 &&\
       mv $SD.010 $SD.015 &&\
-      cp -alu $SD.005 $SD.010
+      logcmd cp -alu $SD.005 $SD.010
       ret=$(($?+$ret))
   fi
 
   #rotation every day (one lauch per day)
-  rm -rf $SD.005 &&\
+  logcmd rm -rf $SD.005 &&\
   mv $SD.004 $SD.005 &&\
   mv $SD.003 $SD.004 &&\
   mv $SD.002 $SD.003 &&\
   mv $SD.001 $SD.002 &&\
-  cp -alu $SD.000 $SD.001
+  logcmd cp -alu $SD.000 $SD.001
 
   ret=$(($?+$ret))
 
