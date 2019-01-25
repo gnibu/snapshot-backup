@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This files is sourcing backup script (snap files)
 # See README.md for parameters and usage example
@@ -53,6 +53,36 @@ MAIL ()
     #cat
 }
 
+logcmd ()
+{
+    echo $* >&2
+    $*
+}
+
+RM ()
+{
+    which -s trash
+    RM_COMMAND="rm -rf"
+    if [[ $? -eq 0 ]]; then
+        RM_COMMAND="trash" 
+    fi
+    logcmd $RM_COMMAND $*
+    #cat
+}
+
+COPY ()
+{
+    which -s pax
+    COPY_COMMAND="cp -alu"
+    if [[ 1 -eq 0 ]]; then
+        [ -d $2 ] || mkdir $2
+        COPY_COMMAND="pax -rwl"
+    fi
+    time logcmd $COPY_COMMAND $*
+    #cat
+}
+
+
 fatal ()
 {
     echo $1
@@ -61,11 +91,7 @@ fatal ()
     exit 1
 }
 
-logcmd ()
-{
-    echo $* >&2
-    $*
-}
+
 
 rotate_snapshots ()
 {
@@ -81,33 +107,33 @@ rotate_snapshots ()
 
   #rotation every month
   if [ $(date "+%-d") -eq 27 ]; then
-	  logcmd rm -rf $SD.180 &&\
+	  RM $SD.180 &&\
       mv $SD.150 $SD.180 &&\
       mv $SD.120 $SD.150 &&\
       mv $SD.090 $SD.120 &&\
       mv $SD.060 $SD.090 &&\
-      logcmd cp -alu $SD.030 $SD.060
+      COPY $SD.030 $SD.060
       ret=$(($?+$ret))
   fi
 
   #rotation every 5 days
   if [ $(($(date "+%-d")%5)) -eq 2 ]; then
-	  logcmd rm -rf $SD.030 &&\
+	  RM $SD.030 &&\
       mv $SD.025 $SD.030 &&\
       mv $SD.020 $SD.025 &&\
       mv $SD.015 $SD.020 &&\
       mv $SD.010 $SD.015 &&\
-      logcmd cp -alu $SD.005 $SD.010
+      COPY $SD.005 $SD.010
       ret=$(($?+$ret))
   fi
 
   #rotation every day (one lauch per day)
-  logcmd rm -rf $SD.005 &&\
+  RM $SD.005 &&\
   mv $SD.004 $SD.005 &&\
   mv $SD.003 $SD.004 &&\
   mv $SD.002 $SD.003 &&\
   mv $SD.001 $SD.002 &&\
-  logcmd cp -alu $SD.000 $SD.001
+  COPY $SD.000 $SD.001
 
   ret=$(($?+$ret))
 
@@ -152,7 +178,7 @@ INIT ()
   [ -d $DEST_DIR/$BACKUPED_HOST ] || mkdir -p $DEST_DIR/$BACKUPED_HOST
 
   if [ "m$SOURCE_HOST" != "mlocalhost" ]; then
-      test_remote_host $DEST_USER $DEST_HOST
+      test_remote_host $SOURCE_USER $SOURCE_HOST
   fi
 
   DEST=$DEST_DIR/$BACKUPED_HOST/snapshot.000
@@ -255,7 +281,7 @@ export ERRORFILE=/tmp/RSYNC-$BACKUPED_HOST-ERROR
 # do the backup in a subprocess to get stdout 
 (
 
-INIT
+time INIT
 
 # run all schedule backups
 echo -e $commands | while read command; do 
