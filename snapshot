@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This files is sourcing backup script (snap files)
 # See README.md for parameters and usage example
@@ -73,12 +73,13 @@ RM ()
 COPY ()
 {
     which -s pax
-    COPY_COMMAND="cp -alu"
+    COPY_COMMAND="rsync -Haxv --stats --link-dest ../$(basename $1) $1/ $2/"
+    #COPY_COMMAND="cp -alu $1 $2"
     if [[ 1 -eq 0 ]]; then
         [ -d $2 ] || mkdir $2
-        COPY_COMMAND="pax -rwl"
+        COPY_COMMAND="pax -rwl $1 $2"
     fi
-    time logcmd $COPY_COMMAND $*
+    time logcmd $COPY_COMMAND
     #cat
 }
 
